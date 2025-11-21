@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # List all test options in the test_conformance dir
-find /snap/opencl-cts/current/usr/bin/test_conformance/ \
+find $SNAP/usr/bin/test_conformance/ \
 -type f \
 -executable \
 -name test_* \
--exec bash -c 'echo "${1#/snap/opencl-cts/current/usr/bin/test_conformance/}"' _ {} \;
+-exec bash -c 'echo "${1#${SNAP}/usr/bin/test_conformance/}"' _ {} \;

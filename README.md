@@ -21,7 +21,7 @@ To list possible tests, run:
 opencl-cts.list-tests
 ```
 
-Then run your chosen test like this:
+Then run your chosen test from the previous list like this:
 ```
 opencl-cts.test basic/test_basic
 ```

@@ -5,4 +5,4 @@ if [ -z "$1" ]; then
     exit 1
 fi
 
-sudo bash -c "/snap/opencl-cts/current/usr/bin/test_conformance/$1"
+bash -c "${SNAP}/usr/bin/test_conformance/$1"

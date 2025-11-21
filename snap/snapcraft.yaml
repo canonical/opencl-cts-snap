@@ -1,12 +1,16 @@
 name: opencl-cts
 base: core24
 confinement: classic
+lint:
+  ignore:
+    - classic
+    - metadata
 platforms:
   amd64:
     build-on: [amd64]
   arm64:
     build-on: [amd64, arm64]
-version: '1.0'
+version: '2024-02-27-00'
 summary: Khronos OpenCL Conformance Test Suite
 description: |
   Baseline snap for the Khronos OpenCL CTS. Builds the test_conformance
@@ -15,13 +19,6 @@ description: |
 apps:
   test:
     command: test
-    plugs:
-      - opengl            # GPU access on many platforms
-      - hardware-observe  # Inspect devices
-      - home              # Read/write logs
-      - network           # Optional: some runners fetch data/plugins
-    environment:
-      LD_LIBRARY_PATH: "/usr/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR:$SNAP/usr/lib:$SNAP/usr/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR:$LD_LIBRARY_PATH"
   list-tests:
     command: list_tests
 
@@ -41,11 +38,10 @@ parts:
   opencl-cts:
     plugin: nil
     source: https://github.com/KhronosGroup/OpenCL-CTS.git
-    source-branch: v2024-02-27-00
+    source-branch: v$SNAPCRAFT_PROJECT_VERSION
     source-type: git
-    after:
-      - test-conformance
-      - list-tests
+    build-attributes:
+      - enable-patchelf
     build-packages:
       - build-essential
       - cmake
@@ -63,10 +59,5 @@ parts:
       cmake -S "$SNAPCRAFT_PART_SRC" -DCL_INCLUDE_DIR=/usr/include/CL -DCL_LIB_DIR=/usr/lib/  -DOPENCL_LIBRARIES=OpenCL
       cmake --build . --config Release
       
-      craftctl default
-      mkdir "${CRAFT_PART_INSTALL}/usr/bin"
-      cp "${CRAFT_PROJECT_DIR}/bin/test" "${CRAFT_PART_INSTALL}/usr/bin/test"
-      cp "${CRAFT_PROJECT_DIR}/bin/list_tests" "${CRAFT_PART_INSTALL}/usr/bin/list_tests"
-
       mkdir -p "${CRAFT_PART_INSTALL}/usr/bin/"
       cp -r "${SNAPCRAFT_PART_BUILD}/test_conformance" "${CRAFT_PART_INSTALL}/usr/bin/"
