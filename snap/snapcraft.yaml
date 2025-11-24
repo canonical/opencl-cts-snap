@@ -3,7 +3,6 @@ base: core24
 confinement: classic
 lint:
   ignore:
-    - classic
     - metadata
 platforms:
   amd64:
