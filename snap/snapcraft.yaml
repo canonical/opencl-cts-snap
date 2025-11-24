@@ -1,0 +1,62 @@
+name: opencl-cts
+base: core24
+confinement: classic
+lint:
+  ignore:
+    - metadata
+platforms:
+  amd64:
+    build-on: [amd64]
+  arm64:
+    build-on: [amd64, arm64]
+version: '2024-02-27-00'
+summary: Khronos OpenCL Conformance Test Suite
+description: |
+  Baseline snap for the Khronos OpenCL CTS. Builds the test_conformance
+  tests from source via CMake and ships an executable for running tests.
+
+apps:
+  test:
+    command: test
+  list-tests:
+    command: list_tests
+
+parts:
+  test-conformance:
+    source: bin/
+    plugin: dump
+    stage:
+      - test
+
+  list-tests:
+    source: bin/
+    plugin: dump
+    stage:
+      - list_tests
+
+  opencl-cts:
+    plugin: nil
+    source: https://github.com/KhronosGroup/OpenCL-CTS.git
+    source-branch: v$SNAPCRAFT_PROJECT_VERSION
+    source-type: git
+    build-attributes:
+      - enable-patchelf
+    build-packages:
+      - build-essential
+      - cmake
+      - git
+      - pkg-config
+      - python3
+      - python3-yaml
+      - opencl-headers
+      - ocl-icd-opencl-dev
+      - spirv-headers
+    stage-packages:
+      -  ocl-icd-libopencl1
+    override-build: |
+      set -eux
+      cmake -S "$SNAPCRAFT_PART_SRC" -DCL_INCLUDE_DIR=/usr/include/CL -DCL_LIB_DIR=/usr/lib/  -DOPENCL_LIBRARIES=OpenCL
+      cmake --build . --config Release
+      
+      mkdir -p "${CRAFT_PART_INSTALL}/usr/bin/"
+      cp -r "${SNAPCRAFT_PART_BUILD}/test_conformance" "${CRAFT_PART_INSTALL}/usr/bin/"
