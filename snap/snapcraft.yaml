@@ -1,6 +1,6 @@
 name: opencl-cts
 base: core24
-confinement: classic
+confinement: strict
 lint:
   ignore:
     - metadata
@@ -10,6 +10,7 @@ platforms:
   arm64:
     build-on: [amd64, arm64]
 version: '2024-02-27-00'
+license: Apache-2.0
 summary: Khronos OpenCL Conformance Test Suite
 description: |
   Baseline snap for the Khronos OpenCL CTS. Builds the test_conformance
