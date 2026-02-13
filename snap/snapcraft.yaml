@@ -7,8 +7,6 @@ lint:
 platforms:
   amd64:
     build-on: [amd64]
-  arm64:
-    build-on: [amd64, arm64]
 version: '2024-02-27-00'
 license: Apache-2.0
 summary: Khronos OpenCL Conformance Test Suite
@@ -19,8 +17,22 @@ description: |
 apps:
   test:
     command: test
+    plugs:
+      - opengl
+    environment:
+      OCL_ICD_VENDORS: $SNAP/etc/OpenCL/vendors
+      LD_LIBRARY_PATH: $SNAP/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
   list-tests:
     command: list_tests
+    plugs:
+      - opengl
+    environment:
+      OCL_ICD_VENDORS: $SNAP/etc/OpenCL/vendors
+      LD_LIBRARY_PATH: $SNAP/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+
+layout:
+  /usr/lib/x86_64-linux-gnu/intel-opencl:
+    bind: $SNAP/usr/lib/x86_64-linux-gnu/intel-opencl
 
 parts:
   test-conformance:
@@ -54,6 +66,8 @@ parts:
       - spirv-headers
     stage-packages:
       -  ocl-icd-libopencl1
+      -  intel-opencl-icd
+      -  libigdgmm12
     override-build: |
       set -eux
       cmake -S "$SNAPCRAFT_PART_SRC" -DCL_INCLUDE_DIR=/usr/include/CL -DCL_LIB_DIR=/usr/lib/  -DOPENCL_LIBRARIES=OpenCL
@@ -61,3 +75,4 @@ parts:
       
       mkdir -p "${CRAFT_PART_INSTALL}/usr/bin/"
       cp -r "${SNAPCRAFT_PART_BUILD}/test_conformance" "${CRAFT_PART_INSTALL}/usr/bin/"
+      mkdir -p "${CRAFT_PART_INSTALL}/etc/OpenCL/vendors"
