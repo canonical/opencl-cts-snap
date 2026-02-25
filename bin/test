@@ -5,4 +5,21 @@ if [ -z "$1" ]; then
     exit 1
 fi
 
-bash -c "${SNAP}/usr/bin/test_conformance/$1"
+case "${SNAP_ARCH}" in
+    amd64) ARCH_TRIPLE=x86_64-linux-gnu ;;
+    arm64) ARCH_TRIPLE=aarch64-linux-gnu ;;
+    *)     ARCH_TRIPLE="${SNAP_ARCH}-linux-gnu" ;;
+esac
+
+# Set up GPU libraries from gpu-2404 content interface (mesa-2404)
+if [ -d "${SNAP}/gpu-2404" ]; then
+    export LD_LIBRARY_PATH="${SNAP}/gpu-2404/usr/lib/${ARCH_TRIPLE}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+fi
+
+
+TEST_BIN="${SNAP}/usr/bin/test_conformance/$1"
+TEST_DIR="$(dirname "$TEST_BIN")"
+TEST_NAME="$(basename "$TEST_BIN")"
+
+cd "$TEST_DIR"
+exec "./$TEST_NAME" "${@:2}"

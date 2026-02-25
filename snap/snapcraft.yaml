@@ -4,6 +4,11 @@ confinement: strict
 lint:
   ignore:
     - metadata
+    - library:libicuio.so.74
+    - library:libicutest.so.74
+    - library:libiga64.so.1
+    - library:libigc.so.1
+    - library:libigdfcl.so.1
 platforms:
   amd64:
     build-on: [amd64]
@@ -14,25 +19,33 @@ description: |
   Baseline snap for the Khronos OpenCL CTS. Builds the test_conformance
   tests from source via CMake and ships an executable for running tests.
 
+environment:
+  LD_LIBRARY_PATH: ${SNAP_LIBRARY_PATH}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}:$SNAP/usr/lib:$SNAP/usr/lib/x86_64-linux-gnu
+  PATH: $SNAP/usr/sbin:$SNAP/usr/bin:$SNAP/sbin:$SNAP/bin:$PATH
+
 apps:
   test:
     command: test
     plugs:
       - opengl
-    environment:
-      OCL_ICD_VENDORS: $SNAP/etc/OpenCL/vendors
-      LD_LIBRARY_PATH: $SNAP/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+      - gpu-2404
   list-tests:
     command: list_tests
     plugs:
       - opengl
-    environment:
-      OCL_ICD_VENDORS: $SNAP/etc/OpenCL/vendors
-      LD_LIBRARY_PATH: $SNAP/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+      - gpu-2404
+
+plugs:
+  gpu-2404:
+    interface: content
+    target: $SNAP/gpu-2404
+    default-provider: mesa-2404
 
 layout:
   /usr/lib/x86_64-linux-gnu/intel-opencl:
     bind: $SNAP/usr/lib/x86_64-linux-gnu/intel-opencl
+  /etc/OpenCL/vendors:
+    bind: $SNAP/etc/OpenCL/vendors
 
 parts:
   test-conformance:
@@ -64,15 +77,19 @@ parts:
       - opencl-headers
       - ocl-icd-opencl-dev
       - spirv-headers
+      - spirv-tools
     stage-packages:
-      -  ocl-icd-libopencl1
-      -  intel-opencl-icd
-      -  libigdgmm12
+      - ocl-icd-libopencl1
+      - intel-opencl-icd
+      - intel-ocloc
     override-build: |
       set -eux
       cmake -S "$SNAPCRAFT_PART_SRC" -DCL_INCLUDE_DIR=/usr/include/CL -DCL_LIB_DIR=/usr/lib/  -DOPENCL_LIBRARIES=OpenCL
       cmake --build . --config Release
-      
+
+      python3 "${SNAPCRAFT_PART_SRC}/test_conformance/spirv_new/assemble_spirv.py" \
+        -s "${SNAPCRAFT_PART_SRC}/test_conformance/spirv_new/spirv_asm" \
+        -o "${SNAPCRAFT_PART_BUILD}/test_conformance/spirv_new/spirv_bin"
+
       mkdir -p "${CRAFT_PART_INSTALL}/usr/bin/"
       cp -r "${SNAPCRAFT_PART_BUILD}/test_conformance" "${CRAFT_PART_INSTALL}/usr/bin/"
-      mkdir -p "${CRAFT_PART_INSTALL}/etc/OpenCL/vendors"
