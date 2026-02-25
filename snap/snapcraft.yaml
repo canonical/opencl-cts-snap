@@ -78,6 +78,7 @@ parts:
       - ocl-icd-opencl-dev
       - spirv-headers
       - spirv-tools
+      - unzip
     stage-packages:
       - ocl-icd-libopencl1
       - intel-opencl-icd
@@ -93,3 +94,8 @@ parts:
 
       mkdir -p "${CRAFT_PART_INSTALL}/usr/bin/"
       cp -r "${SNAPCRAFT_PART_BUILD}/test_conformance" "${CRAFT_PART_INSTALL}/usr/bin/"
+
+      # Pre-extract spir zip files so the test can run in the read-only snap
+      for zip in "${CRAFT_PART_INSTALL}/usr/bin/test_conformance/spir/"*.zip; do
+        (cd "$(dirname "$zip")" && unzip -q -o "$zip")
+      done
