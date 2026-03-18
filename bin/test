@@ -1,25 +1,67 @@
 #!/bin/bash
 
-if [ -z "$1" ]; then
-    echo "Please pass the file path within the test_conformance directory"
+NO_CONFINEMENT=false
+REMAINING_ARGS=()
+# When invoked directly (bypassing the snap launcher), SNAP is not set.
+# Derive it from this script's own location: bin/test lives at $SNAP/bin/test.
+SNAP="${SNAP:-$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")}"
+
+for arg in "$@"; do
+    case "$arg" in
+        --no-confinement)
+            NO_CONFINEMENT=true
+            ;;
+        *)
+            REMAINING_ARGS+=("$arg")
+            ;;
+    esac
+done
+
+if [ -z "${REMAINING_ARGS[0]:-}" ]; then
+    echo "Usage: test [--no-confinement] <test_conformance/path> [args...]"
+    echo ""
+    echo "  --no-confinement  Skip snap-bundled GPU/OpenCL drivers and use host"
+    echo "                    drivers exclusively. Intended for use with the"
+    echo "                    Checkbox framework when snap sandboxing is removed."
     exit 1
 fi
 
-case "${SNAP_ARCH}" in
+ARCH="${SNAP_ARCH:-$(dpkg --print-architecture)}"
+case "$ARCH" in
     amd64) ARCH_TRIPLE=x86_64-linux-gnu ;;
     arm64) ARCH_TRIPLE=aarch64-linux-gnu ;;
-    *)     ARCH_TRIPLE="${SNAP_ARCH}-linux-gnu" ;;
+    *)     ARCH_TRIPLE="${ARCH}-linux-gnu" ;;
 esac
 
-# Set up GPU libraries from gpu-2404 content interface (mesa-2404)
-if [ -d "${SNAP}/gpu-2404" ]; then
-    export LD_LIBRARY_PATH="${SNAP}/gpu-2404/usr/lib/${ARCH_TRIPLE}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+if [ "$NO_CONFINEMENT" = "true" ]; then
+    # Use host drivers exclusively.
+    # LD_PRELOAD overrides DT_RPATH embedded by snapcraft's patchelf pass.
+    # LD_LIBRARY_PATH covers the rest of the host driver stack.
+    # Snap layout mounts are absent when Checkbox strips sandboxing, so
+    # the host's /etc/OpenCL/vendors is used automatically.
+    HOST_OCL="/usr/lib/${ARCH_TRIPLE}/libOpenCL.so.1"
+    if [ ! -f "$HOST_OCL" ]; then
+        echo "Error: --no-confinement requires the host OpenCL ICD loader at $HOST_OCL"
+        echo "Install intel-opencl-icd (or equivalent) on the host before using this mode."
+        exit 1
+    fi
+    export LD_PRELOAD="${HOST_OCL}"
+    export LD_LIBRARY_PATH="/usr/lib/${ARCH_TRIPLE}:/usr/lib"
+    echo "Host OpenCL ICD loader: ${HOST_OCL}"
+else
+    # Set up GPU libraries from gpu-2404 content interface (mesa-2404)
+    if [ -d "${SNAP}/gpu-2404" ]; then
+        export LD_LIBRARY_PATH="${SNAP}/gpu-2404/usr/lib/${ARCH_TRIPLE}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+    else
+        echo "Error: gpu-2404 content interface not found at ${SNAP}/gpu-2404"
+        echo "Connect it with: snap connect opencl-cts:gpu-2404 mesa-2404:gpu-2404"
+        exit 1
+    fi
 fi
 
-
-TEST_BIN="${SNAP}/usr/bin/test_conformance/$1"
+TEST_BIN="${SNAP}/usr/bin/test_conformance/${REMAINING_ARGS[0]}"
 TEST_DIR="$(dirname "$TEST_BIN")"
 TEST_NAME="$(basename "$TEST_BIN")"
 
 cd "$TEST_DIR"
-exec "./$TEST_NAME" "${@:2}"
+exec "./$TEST_NAME" "${REMAINING_ARGS[@]:1}"
