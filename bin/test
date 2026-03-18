@@ -52,6 +52,10 @@ else
     # Set up GPU libraries from gpu-2404 content interface (mesa-2404)
     if [ -d "${SNAP}/gpu-2404" ]; then
         export LD_LIBRARY_PATH="${SNAP}/gpu-2404/usr/lib/${ARCH_TRIPLE}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+    else
+        echo "Error: gpu-2404 content interface not found at ${SNAP}/gpu-2404"
+        echo "Connect it with: snap connect opencl-cts:gpu-2404 mesa-2404:gpu-2404"
+        exit 1
     fi
 fi
 
