@@ -49,12 +49,24 @@ if [ "$NO_CONFINEMENT" = "true" ]; then
     export LD_LIBRARY_PATH="/usr/lib/${ARCH_TRIPLE}:/usr/lib"
     echo "Host OpenCL ICD loader: ${HOST_OCL}"
 else
-    # Set up GPU libraries from gpu-2404 content interface (mesa-2404)
-    if [ -d "${SNAP}/gpu-2404" ]; then
-        export LD_LIBRARY_PATH="${SNAP}/gpu-2404/usr/lib/${ARCH_TRIPLE}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+    # Set up GPU libraries from the gpu content interface. The interface name
+    # depends on the snap base: gpu-2404 (mesa-2404) on core24, gpu-2604
+    # (mesa-2604) on core26. Auto-detect whichever one is connected so this
+    # wrapper is identical across bases.
+    GPU_DIR=""
+    for candidate in gpu-2604 gpu-2404; do
+        if [ -d "${SNAP}/${candidate}" ]; then
+            GPU_DIR="${SNAP}/${candidate}"
+            break
+        fi
+    done
+    if [ -n "$GPU_DIR" ]; then
+        export LD_LIBRARY_PATH="${GPU_DIR}/usr/lib/${ARCH_TRIPLE}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
     else
-        echo "Error: gpu-2404 content interface not found at ${SNAP}/gpu-2404"
-        echo "Connect it with: snap connect opencl-cts:gpu-2404 mesa-2404:gpu-2404"
+        echo "Error: gpu content interface not found at ${SNAP}/gpu-2404 or ${SNAP}/gpu-2604"
+        echo "Connect it with one of:"
+        echo "  snap connect opencl-cts:gpu-2404 mesa-2404:gpu-2404   # core24"
+        echo "  snap connect opencl-cts:gpu-2604 mesa-2604:gpu-2604   # core26"
         exit 1
     fi
 fi

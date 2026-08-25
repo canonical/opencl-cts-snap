@@ -9,8 +9,21 @@ on:
 
 jobs:
   build:
-    name: Build snap
+    name: Build ${{ matrix.base }} snap
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # base:    the project directory to build (each is a self-contained
+          #          snapcraft project rooted at <dir>/snap/snapcraft.yaml)
+          # release: the Snap Store channel to publish to. The core26 track
+          #          must be created in the Store before publishing can succeed
+          #          (request it via the Store dashboard / snapcraft).
+          - base: core24
+            release: edge
+          - base: core26
+            release: core26/edge
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -18,40 +31,20 @@ jobs:
       - name: Build snap
         id: build
         uses: snapcore/action-build@v1
+        with:
+          path: ${{ matrix.base }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: opencl-cts-snap
+          name: opencl-cts-snap-${{ matrix.base }}
           path: ${{ steps.build.outputs.snap }}
 
-  publish:
-    name: Publish to edge
-    runs-on: ubuntu-24.04
-    needs: build
-    if: github.event_name != 'pull_request' && github.ref_name == github.event.repository.default_branch
-    steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: opencl-cts-snap
-          path: .
-
-      - name: Resolve snap file
-        id: snap
-        run: |
-          set -euo pipefail
-          snap_path="$(find . -maxdepth 2 -type f -name '*.snap' | head -n 1)"
-          if [ -z "$snap_path" ]; then
-            echo "No .snap artifact found"
-            exit 1
-          fi
-          echo "path=$snap_path" >> "$GITHUB_OUTPUT"
-
-      - name: Publish to Snap Store edge
+      - name: Publish to Snap Store
+        if: github.event_name != 'pull_request' && github.ref_name == github.event.repository.default_branch
         uses: snapcore/action-publish@v1
         env:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
         with:
-          snap: ${{ steps.snap.outputs.path }}
-          release: edge
+          snap: ${{ steps.build.outputs.snap }}
+          release: ${{ matrix.release }}
