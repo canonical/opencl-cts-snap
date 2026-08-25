@@ -17,9 +17,6 @@ jobs:
         include:
           # base:    the project directory to build (each is a self-contained
           #          snapcraft project rooted at <dir>/snap/snapcraft.yaml)
-          # release: the Snap Store channel to publish to. The core26 track
-          #          must be created in the Store before publishing can succeed
-          #          (request it via the Store dashboard / snapcraft).
           - base: core24
             release: edge
           - base: core26

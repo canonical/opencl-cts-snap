@@ -4,10 +4,7 @@ confinement: strict
 lint:
   ignore:
     - metadata
-    # Intel graphics compiler libraries in the 26.04 archive are soname .so.2
-    # (they were .so.1 on core24). These are pulled in by the Intel driver but
-    # not linked directly by the test binaries, so the library linter flags
-    # them as unused; suppress those false positives.
+    # Driver libraries loaded at runtime, not linked by the tests.
     - library:
         - usr/lib/x86_64-linux-gnu/libiga64.so.2*
         - usr/lib/x86_64-linux-gnu/libigc.so.2*
@@ -16,10 +13,7 @@ lint:
 platforms:
   amd64:
     build-on: [amd64]
-# NOTE: version doubles as the OpenCL-CTS git tag (see source-branch below).
-# core26 tracks a newer CTS tag than core24: the older tag does not compile
-# against the beta-gated cl_khr_command_buffer headers shipped in the 26.04
-# archive, whereas this tag builds with -DCL_ENABLE_BETA_EXTENSIONS.
+# version doubles as the OpenCL-CTS git tag (see source-branch).
 version: '2025-08-21-00'
 license: Apache-2.0
 summary: Khronos OpenCL Conformance Test Suite
@@ -27,10 +21,8 @@ description: |
   Baseline snap for the Khronos OpenCL CTS. Builds the test_conformance
   tests from source via CMake and ships an executable for running tests.
 
-  This is the core26 variant. It bundles the Intel compute-runtime from the
-  Ubuntu 26.04 archive, which supports newer GPUs (e.g. Arc B-series /
-  Battlemage and Panther Lake) that the core24 driver does not, and builds a
-  newer OpenCL-CTS tag compatible with the 26.04 OpenCL headers.
+  The core26 variant, built against a CTS tag compatible with the OpenCL
+  headers and drivers in the 26.04 archive.
 
 environment:
   LD_LIBRARY_PATH: ${SNAP_LIBRARY_PATH}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}:$SNAP/usr/lib:$SNAP/usr/lib/x86_64-linux-gnu

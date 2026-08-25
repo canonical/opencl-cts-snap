@@ -5,19 +5,19 @@ This snap provides an easy way to install and run the tests found in
 
 ## Snap bases
 
-The snap is maintained for two bases, each in its own self-contained
+The snap is maintained for multiple bases, each in its own self-contained
 snapcraft project directory:
 
-| Directory | Base   | GPU content | Intel driver source  | Use for                                     |
-|-----------|--------|-------------|----------------------|---------------------------------------------|
-| `core24/` | core24 | `gpu-2404`  | Ubuntu 24.04 archive | Up to Arc A-series (Alchemist)              |
-| `core26/` | core26 | `gpu-2604`  | Ubuntu 26.04 archive | Newer GPUs: Arc B-series (Battlemage), PTL  |
+| Directory | Base   | GPU content | Notes                                         |
+|-----------|--------|-------------|-----------------------------------------------|
+| `core24/` | core24 | `gpu-2404`  | Drivers and CTS from the 24.04 archive        |
+| `core26/` | core26 | `gpu-2604`  | Newer drivers and CTS from the 26.04 archive  |
 
-The core24 driver predates recent Intel GPUs, so on hardware like the Arc
-B-series or Panther Lake it enumerates no devices and tests fail with
-`clGetPlatformIDs failed`. Use the `core26` build on that hardware.
+Newer hardware needs newer userspace drivers. If a test fails at startup with
+`clGetPlatformIDs failed`, the base you installed likely predates your GPU;
+use a newer base.
 
-In the Snap Store the two variants are published on separate tracks
+In the Snap Store the variants are published on separate tracks
 (`latest`/default for core24, `core26` for core26).
 
 ## Build
@@ -26,8 +26,8 @@ Each directory is a directly-buildable snapcraft project. `cd` into the base
 you want and run snapcraft:
 
 ```
-cd core24 && snapcraft pack     # core24 variant
-cd core26 && snapcraft pack     # core26 variant
+cd core24 && snapcraft pack
+cd core26 && snapcraft pack
 ```
 
 ## Install
@@ -40,10 +40,11 @@ Or from the store, choosing the channel that matches your hardware:
 
 ```
 snap install opencl-cts                       # default (core24) track
-snap install opencl-cts --channel=core26/edge # core26 track (Battlemage/PTL)
+snap install opencl-cts --channel=core26/edge # core26 track
 ```
 
-Connect the matching GPU content interface if it isn't auto-connected:
+The GPU content interface auto-connects for store installs. For a sideloaded
+(`--dangerous`) install, connect it manually to match the base:
 
 ```
 snap connect opencl-cts:gpu-2404 mesa-2404:gpu-2404   # core24
