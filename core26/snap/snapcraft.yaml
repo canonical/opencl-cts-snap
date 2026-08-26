@@ -1,0 +1,106 @@
+name: opencl-cts
+base: core26
+confinement: strict
+lint:
+  ignore:
+    - metadata
+    # Driver libraries loaded at runtime, not linked by the tests.
+    - library:
+        - usr/lib/x86_64-linux-gnu/libiga64.so.2*
+        - usr/lib/x86_64-linux-gnu/libigc.so.2*
+        - usr/lib/x86_64-linux-gnu/libigdfcl.so.2*
+        - usr/lib/x86_64-linux-gnu/libopencl-clang.so.16*
+platforms:
+  amd64:
+    build-on: [amd64]
+# version doubles as the OpenCL-CTS git tag (see source-branch).
+version: '2025-08-21-00'
+license: Apache-2.0
+summary: Khronos OpenCL Conformance Test Suite
+description: |
+  Baseline snap for the Khronos OpenCL CTS. Builds the test_conformance
+  tests from source via CMake and ships an executable for running tests.
+
+  The core26 variant, built against a CTS tag compatible with the OpenCL
+  headers and drivers in the 26.04 archive.
+
+environment:
+  LD_LIBRARY_PATH: ${SNAP_LIBRARY_PATH}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}:$SNAP/usr/lib:$SNAP/usr/lib/x86_64-linux-gnu
+  PATH: $SNAP/usr/sbin:$SNAP/usr/bin:$SNAP/sbin:$SNAP/bin:$PATH
+
+apps:
+  test:
+    command: test
+    plugs:
+      - opengl
+      - gpu-2604
+  list-tests:
+    command: list_tests
+    plugs:
+      - opengl
+      - gpu-2604
+
+plugs:
+  gpu-2604:
+    interface: content
+    target: $SNAP/gpu-2604
+    default-provider: mesa-2604
+
+layout:
+  /usr/lib/x86_64-linux-gnu/intel-opencl:
+    bind: $SNAP/usr/lib/x86_64-linux-gnu/intel-opencl
+  /etc/OpenCL/vendors:
+    bind: $SNAP/etc/OpenCL/vendors
+
+parts:
+  test-conformance:
+    source: bin/
+    plugin: dump
+    stage:
+      - test
+
+  list-tests:
+    source: bin/
+    plugin: dump
+    stage:
+      - list_tests
+
+  opencl-cts:
+    plugin: nil
+    source: https://github.com/KhronosGroup/OpenCL-CTS.git
+    source-branch: v$SNAPCRAFT_PROJECT_VERSION
+    source-type: git
+    build-attributes:
+      - enable-patchelf
+    build-packages:
+      - build-essential
+      - cmake
+      - git
+      - pkg-config
+      - python3
+      - python3-yaml
+      - opencl-headers
+      - ocl-icd-opencl-dev
+      - spirv-headers
+      - spirv-tools
+      - unzip
+    stage-packages:
+      - ocl-icd-libopencl1
+      - intel-opencl-icd
+      - intel-ocloc
+    override-build: |
+      set -eux
+      cmake -S "$SNAPCRAFT_PART_SRC" -DCMAKE_BUILD_TYPE=Release -DCL_INCLUDE_DIR=/usr/include/CL -DCL_LIB_DIR=/usr/lib/  -DOPENCL_LIBRARIES=OpenCL -DSPIRV_INCLUDE_DIR=/usr
+      cmake --build . --config Release
+
+      python3 "${SNAPCRAFT_PART_SRC}/test_conformance/spirv_new/spirv_asm/assemble_spirv.py" \
+        -s "${SNAPCRAFT_PART_SRC}/test_conformance/spirv_new/spirv_asm" \
+        -o "${SNAPCRAFT_PART_BUILD}/test_conformance/spirv_new/spirv_bin"
+
+      mkdir -p "${CRAFT_PART_INSTALL}/usr/bin/"
+      cp -r "${SNAPCRAFT_PART_BUILD}/test_conformance" "${CRAFT_PART_INSTALL}/usr/bin/"
+
+      # Pre-extract spir zip files so the test can run in the read-only snap
+      for zip in "${CRAFT_PART_INSTALL}/usr/bin/test_conformance/spir/"*.zip; do
+        (cd "$(dirname "$zip")" && unzip -q -o "$zip")
+      done
