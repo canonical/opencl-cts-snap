@@ -85,7 +85,7 @@ parts:
       - intel-ocloc
     override-build: |
       set -eux
-      cmake -S "$SNAPCRAFT_PART_SRC" -DCL_INCLUDE_DIR=/usr/include/CL -DCL_LIB_DIR=/usr/lib/  -DOPENCL_LIBRARIES=OpenCL
+      cmake -S "$SNAPCRAFT_PART_SRC" -DCMAKE_BUILD_TYPE=Release -DCL_INCLUDE_DIR=/usr/include/CL -DCL_LIB_DIR=/usr/lib/  -DOPENCL_LIBRARIES=OpenCL
       cmake --build . --config Release
 
       python3 "${SNAPCRAFT_PART_SRC}/test_conformance/spirv_new/assemble_spirv.py" \

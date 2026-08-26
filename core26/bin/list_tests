@@ -1,0 +1,8 @@
+#!/bin/bash
+
+# List all test options in the test_conformance dir
+find $SNAP/usr/bin/test_conformance/ \
+-type f \
+-executable \
+-name test_* \
+-exec bash -c 'echo "${1#${SNAP}/usr/bin/test_conformance/}"' _ {} \;
