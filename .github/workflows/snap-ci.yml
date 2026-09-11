@@ -74,32 +74,20 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # queue:   testflinger queue name
+          # queue:   testflinger queue name (must exist on testflinger.canonical.com)
           # base:    snap base (core24 or core26)
           # release: snap store channel to publish to
           # arch:    target architecture
-          # template: job template file (distro-based for MAAS, url-based for RPi)
-          - queue: opencl-cts-core24
-            base: core24
-            release: edge
-            arch: amd64
-            template: opencl-cts-job.yaml
+          # image_url: pre-installed server image for Raspberry Pi provisioning
           - queue: rpi5b
             base: core24
             release: edge
             arch: arm64
-            template: opencl-cts-job-rpi.yaml
             image_url: https://cdimage.ubuntu.com/ubuntu/releases/24.04.4/release/ubuntu-24.04.4-preinstalled-server-arm64+raspi.img.xz
-          - queue: opencl-cts-core26
-            base: core26
-            release: core26/edge
-            arch: amd64
-            template: opencl-cts-job.yaml
           - queue: rpi5b
             base: core26
             release: core26/edge
             arch: arm64
-            template: opencl-cts-job-rpi.yaml
             image_url: https://cdimage.ubuntu.com/ubuntu/releases/26.04/release/ubuntu-26.04-preinstalled-server-arm64+raspi.img.xz
     steps:
       - name: Checkout
@@ -124,12 +112,10 @@ jobs:
           JOB_QUEUE: ${{ matrix.queue }}
           SNAP_CHANNEL: ${{ matrix.release }}/run-${{ github.run_id }}
           SNAP_BASE: ${{ matrix.base }}
-          DISTRO: noble
           IMAGE_URL: ${{ matrix.image_url }}
         run: |
-          TEMPLATE=".github/workflows/testflinger/${{ matrix.template }}"
-          envsubst '$JOB_QUEUE $DISTRO $IMAGE_URL $SNAP_CHANNEL $SNAP_BASE' \
-            < "$TEMPLATE" \
+          envsubst '$JOB_QUEUE $IMAGE_URL $SNAP_CHANNEL $SNAP_BASE' \
+            < .github/workflows/testflinger/opencl-cts-job-rpi.yaml \
             > .github/workflows/testflinger/opencl-cts-job.temp
           mv .github/workflows/testflinger/opencl-cts-job.temp \
             .github/workflows/testflinger/opencl-cts-job.yaml
