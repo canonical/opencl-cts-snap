@@ -9,18 +9,32 @@ on:
 
 jobs:
   build:
-    name: Build ${{ matrix.base }} snap
-    runs-on: ubuntu-24.04
+    name: Build ${{ matrix.base }} snap (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
           # base:    the project directory to build (each is a self-contained
           #          snapcraft project rooted at <dir>/snap/snapcraft.yaml)
+          # arch:    target architecture
+          # runner:  GitHub-hosted runner matching the target architecture
           - base: core24
             release: edge
+            arch: amd64
+            runner: ubuntu-24.04
+          - base: core24
+            release: edge
+            arch: arm64
+            runner: ubuntu-24.04-arm
           - base: core26
             release: core26/edge
+            arch: amd64
+            runner: ubuntu-24.04
+          - base: core26
+            release: core26/edge
+            arch: arm64
+            runner: ubuntu-24.04-arm
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,7 +48,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: opencl-cts-snap-${{ matrix.base }}
+          name: opencl-cts-snap-${{ matrix.base }}-${{ matrix.arch }}
           path: ${{ steps.build.outputs.snap }}
 
       - name: Publish to Snap Store
@@ -45,3 +59,84 @@ jobs:
         with:
           snap: ${{ steps.build.outputs.snap }}
           release: ${{ matrix.release }}
+
+  testflinger:
+    name: Test ${{ matrix.base }} on ${{ matrix.queue }}
+    needs: build
+    # Only run on push to specific branches, not on PRs
+    if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'develop')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # queue:   testflinger queue name for this base/arch
+          # base:    snap base (core24 or core26)
+          # release: snap store channel to publish to
+          # arch:    target architecture
+          - queue: opencl-cts-core24
+            base: core24
+            release: edge
+            arch: amd64
+          - queue: opencl-cts-core24-arm64
+            base: core24
+            release: edge
+            arch: arm64
+          - queue: opencl-cts-core26
+            base: core26
+            release: core26/edge
+            arch: amd64
+          - queue: opencl-cts-core26-arm64
+            base: core26
+            release: core26/edge
+            arch: arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download snap artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: opencl-cts-snap-${{ matrix.base }}-${{ matrix.arch }}
+          path: .
+
+      - name: Publish snap to temporary channel
+        uses: snapcore/action-publish@v1
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        with:
+          snap: opencl-cts_*.snap
+          release: ${{ matrix.release }}/run-${{ github.run_id }}
+
+      - name: Create Testflinger job
+        env:
+          JOB_QUEUE: ${{ matrix.queue }}
+          SNAP_CHANNEL: ${{ matrix.release }}/run-${{ github.run_id }}
+          SNAP_BASE: ${{ matrix.base }}
+          DISTRO: noble
+        run: |
+          envsubst '$JOB_QUEUE $DISTRO $SNAP_CHANNEL $SNAP_BASE' \
+            < .github/workflows/testflinger/opencl-cts-job.yaml \
+            > .github/workflows/testflinger/opencl-cts-job.temp
+          mv .github/workflows/testflinger/opencl-cts-job.temp \
+            .github/workflows/testflinger/opencl-cts-job.yaml
+
+      - name: Run tests on Testflinger
+        uses: canonical/testflinger/.github/actions/submit@v1
+        with:
+          poll: true
+          job-path: .github/workflows/testflinger/opencl-cts-job.yaml
+          client-id: ${{ secrets.TESTFLINGER_CLIENT_ID }}
+          secret-key: ${{ secrets.TESTFLINGER_SECRET_KEY }}
+
+      - name: Cleanup temporary snap channel
+        if: always()
+        run: |
+          # Remove the temporary snap revision from the channel
+          # This is best-effort; if it fails, the channel will be cleaned up automatically
+          echo "Temporary channel: ${{ matrix.release }}/run-${{ github.run_id }}"
+          echo "Note: Temporary channels are automatically cleaned up after 7 days"
