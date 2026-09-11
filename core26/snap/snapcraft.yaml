@@ -13,6 +13,8 @@ lint:
 platforms:
   amd64:
     build-on: [amd64]
+  arm64:
+    build-on: [arm64]
 # version doubles as the OpenCL-CTS git tag (see source-branch).
 version: '2025-08-21-00'
 license: Apache-2.0
@@ -25,7 +27,7 @@ description: |
   headers and drivers in the 26.04 archive.
 
 environment:
-  LD_LIBRARY_PATH: ${SNAP_LIBRARY_PATH}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}:$SNAP/usr/lib:$SNAP/usr/lib/x86_64-linux-gnu
+  LD_LIBRARY_PATH: ${SNAP_LIBRARY_PATH}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}:$SNAP/usr/lib:$SNAP/usr/lib/x86_64-linux-gnu:$SNAP/usr/lib/aarch64-linux-gnu
   PATH: $SNAP/usr/sbin:$SNAP/usr/bin:$SNAP/sbin:$SNAP/bin:$PATH
 
 apps:
@@ -86,8 +88,6 @@ parts:
       - unzip
     stage-packages:
       - ocl-icd-libopencl1
-      - intel-opencl-icd
-      - intel-ocloc
     override-build: |
       set -eux
       cmake -S "$SNAPCRAFT_PART_SRC" -DCMAKE_BUILD_TYPE=Release -DCL_INCLUDE_DIR=/usr/include/CL -DCL_LIB_DIR=/usr/lib/  -DOPENCL_LIBRARIES=OpenCL -DSPIRV_INCLUDE_DIR=/usr
@@ -104,3 +104,12 @@ parts:
       for zip in "${CRAFT_PART_INSTALL}/usr/bin/test_conformance/spir/"*.zip; do
         (cd "$(dirname "$zip")" && unzip -q -o "$zip")
       done
+
+      # Install Intel OpenCL packages on amd64 only
+      if [ "$(dpkg --print-architecture)" = "amd64" ]; then
+        apt-get download intel-opencl-icd intel-ocloc
+        for deb in intel-*.deb; do
+          dpkg -x "$deb" "${CRAFT_PART_INSTALL}/"
+        done
+        rm -f intel-*.deb
+      fi
