@@ -99,12 +99,23 @@ jobs:
           name: opencl-cts-snap-${{ matrix.base }}-${{ matrix.arch }}
           path: .
 
+      - name: Resolve snap file
+        id: snap
+        run: |
+          set -euo pipefail
+          snap_path="$(find . -maxdepth 2 -type f -name 'opencl-cts_*.snap' | head -n 1)"
+          if [ -z "$snap_path" ]; then
+            echo "No .snap artifact found"
+            exit 1
+          fi
+          echo "path=$snap_path" >> "$GITHUB_OUTPUT"
+
       - name: Publish snap to temporary channel
         uses: snapcore/action-publish@v1
         env:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
         with:
-          snap: opencl-cts_*.snap
+          snap: ${{ steps.snap.outputs.path }}
           release: ${{ matrix.release }}/run-${{ github.run_id }}
 
       - name: Create Testflinger job
