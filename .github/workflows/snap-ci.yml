@@ -37,7 +37,7 @@ jobs:
             runner: ubuntu-24.04-arm
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Build snap
         id: build
@@ -46,7 +46,7 @@ jobs:
           path: ${{ matrix.base }}
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: opencl-cts-snap-${{ matrix.base }}-${{ matrix.arch }}
           path: ${{ steps.build.outputs.snap }}
@@ -64,7 +64,7 @@ jobs:
     name: Test ${{ matrix.base }} on ${{ matrix.queue }}
     needs: build
     # Only run on push to specific branches, not on PRs
-    if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'develop')
+    if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'develop' || github.ref_name == 'rpi5b-testflinger')
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     permissions:
@@ -91,10 +91,10 @@ jobs:
             image_url: https://cdimage.ubuntu.com/ubuntu/releases/26.04/release/ubuntu-26.04-preinstalled-server-arm64+raspi.img.xz
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download snap artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: opencl-cts-snap-${{ matrix.base }}-${{ matrix.arch }}
           path: .
@@ -121,7 +121,7 @@ jobs:
             .github/workflows/testflinger/opencl-cts-job.yaml
 
       - name: Run tests on Testflinger
-        uses: canonical/testflinger/.github/actions/submit@v1
+        uses: canonical/testflinger/.github/actions/submit@submit/v1.5.0
         with:
           poll: true
           job-path: .github/workflows/testflinger/opencl-cts-job.yaml
