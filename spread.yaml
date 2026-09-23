@@ -1,0 +1,68 @@
+# Spread configuration for running OpenCL CTS tests on Testflinger hardware.
+#
+# The `testflinger` backend (provided by spread-plus, not upstream spread)
+# submits an allocation/reservation job to a Testflinger queue, waits for the
+# device to be ready, then connects to it over SSH and runs the tasks below.
+#
+# SSH authentication uses Testflinger's reserve mechanism: the `reserve-key`
+# names a GitHub (gh:) or Launchpad (lp:) account whose public keys are
+# imported into the device, and `ssh-rsa-key` provides the matching private
+# key. The private key is read from the runner's environment (SPREAD_SSH_KEY)
+# and CI substitutes the reserve-key account from SPREAD_RESERVE_KEY, so no
+# credentials live in this file.
+
+project: opencl-cts-snap
+
+path: /tmp/opencl-cts-snap
+
+exclude:
+  - .git/**
+  - '.github/**'
+  - '*.log'
+  - '*.temp'
+
+backends:
+  testflinger:
+    # How long to wait for the device to be allocated before giving up.
+    wait-timeout: 30m
+    # Longest a spread-tagged job may run; used by Testflinger to cancel
+    # jobs that outlive the timeout (also sent as cleanup signal).
+    halt-timeout: 2h
+    systems:
+      - rpi5-core24:
+          queue: rpi5b
+          # Pre-installed server image for the Raspberry Pi 5 on Ubuntu 24.04.
+          image: "https://cdimage.ubuntu.com/ubuntu/releases/24.04.4/release/ubuntu-24.04.4-preinstalled-server-arm64+raspi.img.xz"
+          username: ubuntu
+          # Account whose public SSH keys are imported into the device
+          # (gh:<github-user> or lp:<launchpad-user>). spread-plus does not
+          # expand `$(HOST: ...)` for this field, so CI substitutes the value
+          # at run time (see snap-ci.yml).
+          reserve-key: gh:replace-with-your-github-user
+          ssh-rsa-key: '$(HOST: echo "$SPREAD_SSH_KEY")'
+          workers: 1
+          environment:
+            SNAP_BASE: core24
+            GPU_INTERFACE: gpu-2404
+            GPU_PROVIDER: mesa-2404
+      - rpi5-core26:
+          queue: rpi5b
+          # Pre-installed server image for the Raspberry Pi 5 on Ubuntu 26.04.
+          image: "https://cdimage.ubuntu.com/ubuntu/releases/26.04/release/ubuntu-26.04-preinstalled-server-arm64+raspi.img.xz"
+          username: ubuntu
+          reserve-key: gh:replace-with-your-github-user
+          ssh-rsa-key: '$(HOST: echo "$SPREAD_SSH_KEY")'
+          workers: 1
+          environment:
+            SNAP_BASE: core26
+            GPU_INTERFACE: gpu-2604
+            GPU_PROVIDER: mesa-2604
+
+suites:
+  tests/rpi/:
+    summary: OpenCL CTS on Raspberry Pi 5 (rpi5b queue)
+    environment:
+      # On the Pi the GPU is exposed through Mesa Rusticl, which is not
+      # CTS-conformant and can hang, so only a representative smoke subset
+      # of the test suite is executed.
+      SMOKE_PREFIXES: api basic buffer bufimage vector

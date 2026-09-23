@@ -9,21 +9,35 @@ on:
 
 jobs:
   build:
-    name: Build ${{ matrix.base }} snap
-    runs-on: ubuntu-24.04
+    name: Build ${{ matrix.base }} snap (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
           # base:    the project directory to build (each is a self-contained
           #          snapcraft project rooted at <dir>/snap/snapcraft.yaml)
+          # arch:    target architecture
+          # runner:  GitHub-hosted runner matching the target architecture
           - base: core24
             release: edge
+            arch: amd64
+            runner: ubuntu-24.04
+          - base: core24
+            release: edge
+            arch: arm64
+            runner: ubuntu-24.04-arm
           - base: core26
             release: core26/edge
+            arch: amd64
+            runner: ubuntu-24.04
+          - base: core26
+            release: core26/edge
+            arch: arm64
+            runner: ubuntu-24.04-arm
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Build snap
         id: build
@@ -32,9 +46,9 @@ jobs:
           path: ${{ matrix.base }}
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: opencl-cts-snap-${{ matrix.base }}
+          name: opencl-cts-snap-${{ matrix.base }}-${{ matrix.arch }}
           path: ${{ steps.build.outputs.snap }}
 
       - name: Publish to Snap Store
@@ -45,3 +59,84 @@ jobs:
         with:
           snap: ${{ steps.build.outputs.snap }}
           release: ${{ matrix.release }}
+
+  spread:
+    name: Test ${{ matrix.base }} on rpi5b (spread)
+    needs: build
+    # Only run on push to specific branches, not on PRs
+    if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'develop' || github.ref_name == 'rpi5b-testflinger')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # system: an entry in spread.yaml (testflinger backend) that runs the
+          # given snap base on the rpi5b Raspberry Pi 5 queue.
+          - base: core24
+            system: rpi5-core24
+          - base: core26
+            system: rpi5-core26
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download snap artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: opencl-cts-snap-${{ matrix.base }}-arm64
+          path: .
+
+      - name: Rename snap to a stable path
+        run: |
+          set -euo pipefail
+          snap_file="$(find . -maxdepth 2 -type f -name 'opencl-cts_*.snap' | head -n 1)"
+          if [ -z "$snap_file" ]; then
+            echo "No .snap artifact found"
+            exit 1
+          fi
+          mv "$snap_file" opencl-cts.snap
+
+      - name: Install spread-plus
+        run: |
+          set -euo pipefail
+          # Pinned release; the tarball contains a single `spread-plus` binary.
+          curl -fsSL -o /tmp/spread-plus.tar.gz \
+            https://github.com/canonical/spread-plus/releases/download/2026.09.22/spread-plus-amd64.tar.gz
+          tar -xzf /tmp/spread-plus.tar.gz -C /usr/local/bin spread-plus
+          chmod +x /usr/local/bin/spread-plus
+          spread-plus --version
+
+      - name: Run OpenCL CTS tests on the Raspberry Pi 5
+        env:
+          TESTFLINGER_CLIENT_ID: ${{ secrets.TESTFLINGER_CLIENT_ID }}
+          TESTFLINGER_SECRET_KEY: ${{ secrets.TESTFLINGER_SECRET_KEY }}
+          SPREAD_RESERVE_KEY: ${{ vars.SPREAD_RESERVE_KEY }}
+          SPREAD_SSH_KEY: ${{ secrets.SPREAD_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          : "${TESTFLINGER_CLIENT_ID:?TESTFLINGER_CLIENT_ID secret is required}"
+          : "${TESTFLINGER_SECRET_KEY:?TESTFLINGER_SECRET_KEY secret is required}"
+          : "${SPREAD_RESERVE_KEY:?SPREAD_RESERVE_KEY variable is required (gh:<github-user>)}"
+          : "${SPREAD_SSH_KEY:?SPREAD_SSH_KEY secret is required}"
+          # spread-plus does not expand `$(HOST: ...)` in the `reserve-key`
+          # field, so inject the imported-keys account from the variable.
+          sed -i "s|^\( *reserve-key: \).*|\1${SPREAD_RESERVE_KEY}|" spread.yaml
+          # `pipefail` ensures a non-zero spread status is propagated.
+          spread-plus testflinger:${{ matrix.system }}:tests/ | tee spread.log
+
+      - name: Clean up leftover spread jobs
+        if: always()
+        run: |
+          set -euo pipefail
+          # spread releases the Testflinger job when the task finishes, so no
+          # reuse files are normally produced. If an interrupted run left reuse
+          # state behind, discard it; any lingering allocation is also cancelled
+          # by the halt-timeout set in spread.yaml.
+          shopt -s nullglob
+          for r in .spread-reuse.*.yaml; do
+            spread-plus -discard -reuse-pid="$(echo "$r" | grep -o -E '[0-9]+')"
+          done
