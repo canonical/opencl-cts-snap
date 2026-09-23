@@ -64,3 +64,10 @@ Then run your chosen test from the previous list like this:
 ```
 opencl-cts.test basic/test_basic
 ```
+
+## CI on real hardware
+
+On pushes to `main`/`develop`, GitHub Actions runs the OpenCL CTS smoke suite
+on a Raspberry Pi 5 through Testflinger and spread. See
+[`docs/CI.md`](docs/CI.md) for the setup, the repository secrets and variables
+it requires, and how to run it locally.
