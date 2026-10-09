@@ -61,12 +61,13 @@ jobs:
           release: ${{ matrix.release }}
 
   spread:
-    name: Test ${{ matrix.base }} on rpi5b (spread)
+    name: Test ${{ matrix.system }} (spread)
     needs: build
     # Only run on push to specific branches, not on PRs
-    if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'develop' || github.ref_name == 'rpi5b-testflinger')
+    if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'develop' || contains(github.ref_name, 'testflinger'))
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    # Genio jobs flash an eMMC before running the suite, so allow more time.
+    timeout-minutes: 300
     permissions:
       contents: read
       actions: read
@@ -74,12 +75,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # system: an entry in spread.yaml (testflinger backend) that runs the
-          # given snap base on the rpi5b Raspberry Pi 5 queue.
+          # system: an entry in spread.yaml (testflinger backend). The RPi5 and
+          # Genio entries below run the matching snap base on the target queue.
           - base: core24
             system: rpi5-core24
           - base: core26
             system: rpi5-core26
+          # MediaTek Genio boards (Ubuntu 24.04 only -> core24). Each queue is
+          # flashed through the zapper_iot connector; fill in the queue names
+          # and image URLs in spread.yaml before enabling these.
+          - base: core24
+            system: genio-1200
+          - base: core24
+            system: genio-700
+          - base: core24
+            system: genio-720
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -110,7 +120,7 @@ jobs:
           chmod +x /usr/local/bin/spread-plus
           spread-plus --version
 
-      - name: Run OpenCL CTS tests on the Raspberry Pi 5
+      - name: Run OpenCL CTS tests on the target board
         env:
           TESTFLINGER_CLIENT_ID: ${{ secrets.TESTFLINGER_CLIENT_ID }}
           TESTFLINGER_SECRET_KEY: ${{ secrets.TESTFLINGER_SECRET_KEY }}
@@ -122,6 +132,13 @@ jobs:
           : "${TESTFLINGER_SECRET_KEY:?TESTFLINGER_SECRET_KEY secret is required}"
           : "${SPREAD_RESERVE_KEY:?SPREAD_RESERVE_KEY variable is required (gh:<github-user>)}"
           : "${SPREAD_SSH_KEY:?SPREAD_SSH_KEY secret is required}"
+          # Fail fast (before consuming a device) while the Genio queue names
+          # and image URLs are still placeholders.
+          if [[ "${{ matrix.system }}" == genio-* ]] && grep -q 'REPLACE_ME' spread.yaml; then
+            echo "::error::spread.yaml still contains REPLACE_ME placeholders; fill in the Genio queue names and image URLs first."
+            grep -n 'REPLACE_ME' spread.yaml
+            exit 1
+          fi
           # spread-plus does not expand `$(HOST: ...)` in the `reserve-key`
           # field, so inject the imported-keys account from the variable.
           sed -i "s|^\( *reserve-key: \).*|\1${SPREAD_RESERVE_KEY}|" spread.yaml

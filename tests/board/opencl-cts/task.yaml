@@ -1,20 +1,29 @@
-# Runs the OpenCL CTS smoke tests on a freshly provisioned Raspberry Pi 5.
+# Runs the OpenCL CTS smoke tests on a freshly provisioned ARM board
+# (Raspberry Pi 5 or a MediaTek Genio EVK).
 #
 # The snap under test is shipped to the device by spread as part of the
 # project files (see the `opencl-cts.snap` rename step in snap-ci.yml) and
 # installed sideloaded with `snap install --dangerous`.
-summary: Run OpenCL CTS smoke tests on the Raspberry Pi 5
+summary: Run OpenCL CTS smoke tests on an ARM board (Raspberry Pi 5, MediaTek Genio)
 
 prepare: |
     set -eu
 
-    echo "=== Installing host OpenCL driver (Mesa Rusticl on V3D) ==="
-    # Raspberry Pi boards expose the V3D GPU through Mesa Rusticl instead of a
-    # vendor OpenCL driver. The snap cannot reach the host ICD while confined
-    # (no ICD is staged inside the arm64 snap), so Mesa is installed on the
-    # host and tests run unsandboxed via the test wrapper's --no-confinement.
+    : "${SNAP_BASE:?SNAP_BASE must be set by spread.yaml}"
+    : "${GPU_INTERFACE:?GPU_INTERFACE must be set by spread.yaml}"
+    : "${GPU_PROVIDER:?GPU_PROVIDER must be set by spread.yaml}"
+
+    echo "=== Installing host OpenCL driver (Mesa Rusticl) ==="
+    # These boards expose their GPU through Mesa Rusticl instead of a vendor
+    # OpenCL driver. The snap cannot reach the host ICD while confined (no ICD
+    # is staged inside the arm64 snap), so Mesa is installed on the host and
+    # tests run unsandboxed via the test wrapper's --no-confinement.
+    # HOST_OCL_PACKAGES lets each board pick its driver stack (Panthor on
+    # MediaTek, V3D on the Raspberry Pi, ...).
+    HOST_OCL_PACKAGES="${HOST_OCL_PACKAGES:-ocl-icd-libopencl1 mesa-opencl-icd}"
     apt-get update -qq
-    apt-get install -y -qq ocl-icd-libopencl1 mesa-opencl-icd
+    # shellcheck disable=SC2086
+    apt-get install -y -qq $HOST_OCL_PACKAGES
     test -f /usr/lib/aarch64-linux-gnu/libOpenCL.so.1
 
     echo "=== Installing the OpenCL CTS snap (sideloaded) ==="
@@ -54,11 +63,11 @@ execute: |
 
     # Execute the snap's test wrapper directly (bypassing snapd confinement) so
     # it can LD_PRELOAD the host OpenCL ICD loader. A timeout guards against
-    # tests that hang on the Rusticl V3D driver.
+    # tests that hang on Mesa Rusticl.
     wrapper=$(find /snap/opencl-cts/current -maxdepth 2 -type f -name test | head -n 1)
 
     echo ""
-    echo "=== Running smoke subset on Raspberry Pi ($SNAP_BASE) ==="
+    echo "=== Running smoke subset on ${SPREAD_SYSTEM:-board} ($SNAP_BASE) ==="
     FAILED_TESTS=""
     TOTAL=0
     FAILED=0

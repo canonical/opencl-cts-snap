@@ -24,11 +24,15 @@ exclude:
 backends:
   testflinger:
     # How long to wait for the device to be allocated before giving up.
-    wait-timeout: 30m
+    # Generous enough to cover a Genio eMMC flash on a busy queue.
+    wait-timeout: 45m
     # Longest a spread-tagged job may run; used by Testflinger to cancel
     # jobs that outlive the timeout (also sent as cleanup signal).
-    halt-timeout: 2h
+    halt-timeout: 3h
     systems:
+      # ------------------------------------------------------------------
+      # Raspberry Pi 5 (arm64, pre-installed SD image)
+      # ------------------------------------------------------------------
       - rpi5-core24:
           queue: rpi5b
           # Pre-installed server image for the Raspberry Pi 5 on Ubuntu 24.04.
@@ -58,11 +62,73 @@ backends:
             GPU_INTERFACE: gpu-2604
             GPU_PROVIDER: mesa-2604
 
+      # ------------------------------------------------------------------
+      # MediaTek Genio EVK (arm64, flashed by the zapper_iot connector)
+      #
+      # Each board has its own Testflinger queue. zapper_iot provisions by
+      # flashing the Ubuntu disk image plus the board-specific boot firmware,
+      # so we use the free-form `provision-data` map (spread-plus >= the
+      # release pinned in snap-ci.yml) instead of the `image:` shorthand.
+      #
+      # TODO(owner): replace each `queue` with the real Testflinger queue
+      # name and the `urls` below with the Genio download URLs before the
+      # Genio jobs can run. Contact the Testflinger admin if the queues are
+      # restricted (they then also need their own client credentials).
+      #
+      # Only Ubuntu 24.04 (core24) images are published for Genio today, so
+      # these run the core24 snap exclusively.
+      # ------------------------------------------------------------------
+      - genio-1200:
+          queue: REPLACE_ME-genio-1200-queue
+          provision-data:
+            urls:
+              - REPLACE_ME-genio-1200-ubuntu-disk-image-url
+              - REPLACE_ME-genio-1200-boot-firmware-url
+          username: ubuntu
+          reserve-key: gh:replace-with-your-github-user
+          ssh-rsa-key: '$(HOST: echo "$SPREAD_SSH_KEY")'
+          workers: 1
+          environment:
+            SNAP_BASE: core24
+            GPU_INTERFACE: gpu-2404
+            GPU_PROVIDER: mesa-2404
+      - genio-700:
+          queue: REPLACE_ME-genio-700-queue
+          provision-data:
+            urls:
+              - REPLACE_ME-genio-700-ubuntu-disk-image-url
+              - REPLACE_ME-genio-700-boot-firmware-url
+          username: ubuntu
+          reserve-key: gh:replace-with-your-github-user
+          ssh-rsa-key: '$(HOST: echo "$SPREAD_SSH_KEY")'
+          workers: 1
+          environment:
+            SNAP_BASE: core24
+            GPU_INTERFACE: gpu-2404
+            GPU_PROVIDER: mesa-2404
+      - genio-720:
+          queue: REPLACE_ME-genio-720-queue
+          provision-data:
+            urls:
+              - REPLACE_ME-genio-720-ubuntu-disk-image-url
+              - REPLACE_ME-genio-720-boot-firmware-url
+          username: ubuntu
+          reserve-key: gh:replace-with-your-github-user
+          ssh-rsa-key: '$(HOST: echo "$SPREAD_SSH_KEY")'
+          workers: 1
+          environment:
+            SNAP_BASE: core24
+            GPU_INTERFACE: gpu-2404
+            GPU_PROVIDER: mesa-2404
+
 suites:
-  tests/rpi/:
-    summary: OpenCL CTS on Raspberry Pi 5 (rpi5b queue)
+  tests/board/:
+    summary: OpenCL CTS on ARM boards (Raspberry Pi 5, MediaTek Genio)
     environment:
-      # On the Pi the GPU is exposed through Mesa Rusticl, which is not
+      # On these boards the GPU is exposed through Mesa Rusticl, which is not
       # CTS-conformant and can hang, so only a representative smoke subset
-      # of the test suite is executed.
+      # of the test suite is executed. Override per system if needed.
       SMOKE_PREFIXES: api basic buffer bufimage vector
+      # Default host driver stack; override per system for a different GPU.
+      # Panthor (MediaTek Mali) and V3D (Raspberry Pi) both come from Mesa.
+      HOST_OCL_PACKAGES: ocl-icd-libopencl1 mesa-opencl-icd
