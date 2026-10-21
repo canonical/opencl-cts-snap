@@ -64,3 +64,12 @@ Then run your chosen test from the previous list like this:
 ```
 opencl-cts.test basic/test_basic
 ```
+
+## CI on real hardware
+
+On pushes to `main`/`develop` (and dedicated `*testflinger` branches), GitHub
+Actions builds the arm64 snap and runs the OpenCL CTS smoke suite on real ARM
+hardware through Testflinger and spread: a Raspberry Pi 5 and MediaTek Genio
+EVK boards. See [`docs/CI.md`](docs/CI.md) for the setup, the repository secrets
+and variables it requires, how to fill in the Genio queue names and image URLs,
+and how to run it locally.
