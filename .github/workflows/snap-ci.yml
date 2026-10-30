@@ -9,21 +9,35 @@ on:
 
 jobs:
   build:
-    name: Build ${{ matrix.base }} snap
-    runs-on: ubuntu-24.04
+    name: Build ${{ matrix.base }} snap (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
           # base:    the project directory to build (each is a self-contained
           #          snapcraft project rooted at <dir>/snap/snapcraft.yaml)
+          # arch:    target architecture
+          # runner:  GitHub-hosted runner matching the target architecture
           - base: core24
             release: edge
+            arch: amd64
+            runner: ubuntu-24.04
+          - base: core24
+            release: edge
+            arch: arm64
+            runner: ubuntu-24.04-arm
           - base: core26
             release: core26/edge
+            arch: amd64
+            runner: ubuntu-24.04
+          - base: core26
+            release: core26/edge
+            arch: arm64
+            runner: ubuntu-24.04-arm
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Build snap
         id: build
@@ -32,9 +46,9 @@ jobs:
           path: ${{ matrix.base }}
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: opencl-cts-snap-${{ matrix.base }}
+          name: opencl-cts-snap-${{ matrix.base }}-${{ matrix.arch }}
           path: ${{ steps.build.outputs.snap }}
 
       - name: Publish to Snap Store
@@ -45,3 +59,126 @@ jobs:
         with:
           snap: ${{ steps.build.outputs.snap }}
           release: ${{ matrix.release }}
+
+  # Hardware jobs need Testflinger machine credentials, which are issued by
+  # the Testflinger admin (see docs/CI.md). They may not be configured yet
+  # (e.g. on forks or while credentials are pending), so detect that up front.
+  #
+  # This job also decides WHICH hardware jobs to run (event/branch gating).
+  # The result is emitted as the consumer's matrix: the full board list, or
+  # an empty JSON array. An empty array is a legal matrix value that expands
+  # to zero jobs, so no skipped placeholder jobs with un-expanded
+  # "${{ matrix.* }}" names appear in the checks list.
+  creds-check:
+    name: Check Testflinger credentials
+    runs-on: ubuntu-24.04
+    outputs:
+      has_creds: ${{ steps.check.outputs.has_creds }}
+      systems: ${{ steps.check.outputs.systems }}
+    steps:
+      - id: check
+        env:
+          TF_CLIENT_ID: ${{ secrets.TESTFLINGER_CLIENT_ID }}
+          TF_SECRET_KEY: ${{ secrets.TESTFLINGER_SECRET_KEY }}
+          EVENT_NAME: ${{ github.event_name }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          has_creds=false
+          if [ -n "$TF_CLIENT_ID" ] && [ -n "$TF_SECRET_KEY" ]; then
+            has_creds=true
+          else
+            echo "::notice title=Hardware tests skipped::TESTFLINGER_CLIENT_ID/TESTFLINGER_SECRET_KEY are not configured; ask the Testflinger admin for a machine client and add them as repository secrets (see docs/CI.md)."
+          fi
+          echo "has_creds=$has_creds" >> "$GITHUB_OUTPUT"
+
+          # Hardware jobs run on push to main/develop or any *testflinger*
+          # branch (never on PRs); keep this in sync with docs/CI.md.
+          systems='[]'
+          if [ "$has_creds" = true ] && [ "$EVENT_NAME" = push ]; then
+            case "$BRANCH" in
+              main|develop|*testflinger*)
+                # system: an entry in spread.yaml (testflinger backend). The
+                # RPi5 entries run both snap bases; the MediaTek Genio boards
+                # (Ubuntu 24.04 only) run the core24 snap.
+                systems='[{"base":"core24","system":"rpi5-core24"},{"base":"core26","system":"rpi5-core26"},{"base":"core24","system":"genio-1200"},{"base":"core24","system":"genio-700"},{"base":"core24","system":"genio-720"}]'
+                ;;
+            esac
+          fi
+          # The step-output file is line-oriented: keep JSON on one line.
+          echo "systems=$systems" >> "$GITHUB_OUTPUT"
+
+  spread:
+    name: Test ${{ matrix.system }} (spread)
+    needs: [build, creds-check]
+    # No job-level `if`: the matrix itself is empty (zero jobs) whenever the
+    # hardware tests should not run. A job-level `if` would leave a skipped
+    # placeholder whose name shows the raw "${{ matrix.system }}" template.
+    runs-on: ubuntu-24.04
+    # Genio jobs flash an eMMC before running the suite, so allow more time.
+    timeout-minutes: 300
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.creds-check.outputs.systems) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download snap artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: opencl-cts-snap-${{ matrix.base }}-arm64
+          path: .
+
+      - name: Rename snap to a stable path
+        run: |
+          set -euo pipefail
+          snap_file="$(find . -maxdepth 2 -type f -name 'opencl-cts_*.snap' | head -n 1)"
+          if [ -z "$snap_file" ]; then
+            echo "No .snap artifact found"
+            exit 1
+          fi
+          mv "$snap_file" opencl-cts.snap
+
+      - name: Install spread-plus
+        run: |
+          set -euo pipefail
+          # Pinned release; the tarball contains a single `spread-plus` binary.
+          curl -fsSL -o /tmp/spread-plus.tar.gz \
+            https://github.com/canonical/spread-plus/releases/download/2026.09.22/spread-plus-amd64.tar.gz
+          tar -xzf /tmp/spread-plus.tar.gz -C /usr/local/bin spread-plus
+          chmod +x /usr/local/bin/spread-plus
+          spread-plus --version
+
+      - name: Run OpenCL CTS tests on the target board
+        env:
+          TESTFLINGER_CLIENT_ID: ${{ secrets.TESTFLINGER_CLIENT_ID }}
+          TESTFLINGER_SECRET_KEY: ${{ secrets.TESTFLINGER_SECRET_KEY }}
+          SPREAD_RESERVE_KEY: ${{ vars.SPREAD_RESERVE_KEY }}
+          SPREAD_SSH_KEY: ${{ secrets.SPREAD_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          : "${TESTFLINGER_CLIENT_ID:?TESTFLINGER_CLIENT_ID secret is required}"
+          : "${TESTFLINGER_SECRET_KEY:?TESTFLINGER_SECRET_KEY secret is required}"
+          : "${SPREAD_RESERVE_KEY:?SPREAD_RESERVE_KEY variable is required (gh:<github-user>)}"
+          : "${SPREAD_SSH_KEY:?SPREAD_SSH_KEY secret is required}"
+          # spread-plus does not expand `$(HOST: ...)` in the `reserve-key`
+          # field, so inject the imported-keys account from the variable.
+          sed -i "s|^\( *reserve-key: \).*|\1${SPREAD_RESERVE_KEY}|" spread.yaml
+          # `pipefail` ensures a non-zero spread status is propagated.
+          spread-plus testflinger:${{ matrix.system }}:tests/ | tee spread.log
+
+      - name: Clean up leftover spread jobs
+        if: always()
+        run: |
+          set -euo pipefail
+          # spread releases the Testflinger job when the task finishes, so no
+          # reuse files are normally produced. If an interrupted run left reuse
+          # state behind, discard it; any lingering allocation is also cancelled
+          # by the halt-timeout set in spread.yaml.
+          shopt -s nullglob
+          for r in .spread-reuse.*.yaml; do
+            spread-plus -discard -reuse-pid="$(echo "$r" | grep -o -E '[0-9]+')"
+          done
