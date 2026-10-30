@@ -62,35 +62,57 @@ jobs:
 
   # Hardware jobs need Testflinger machine credentials, which are issued by
   # the Testflinger admin (see docs/CI.md). They may not be configured yet
-  # (e.g. on forks or while credentials are pending), so detect that up front
-  # and skip the hardware jobs with a notice instead of failing the run.
+  # (e.g. on forks or while credentials are pending), so detect that up front.
+  #
+  # This job also decides WHICH hardware jobs to run (event/branch gating).
+  # The result is emitted as the consumer's matrix: the full board list, or
+  # an empty JSON array. An empty array is a legal matrix value that expands
+  # to zero jobs, so no skipped placeholder jobs with un-expanded
+  # "${{ matrix.* }}" names appear in the checks list.
   creds-check:
     name: Check Testflinger credentials
     runs-on: ubuntu-24.04
     outputs:
       has_creds: ${{ steps.check.outputs.has_creds }}
+      systems: ${{ steps.check.outputs.systems }}
     steps:
       - id: check
         env:
           TF_CLIENT_ID: ${{ secrets.TESTFLINGER_CLIENT_ID }}
           TF_SECRET_KEY: ${{ secrets.TESTFLINGER_SECRET_KEY }}
+          EVENT_NAME: ${{ github.event_name }}
+          BRANCH: ${{ github.ref_name }}
         run: |
+          has_creds=false
           if [ -n "$TF_CLIENT_ID" ] && [ -n "$TF_SECRET_KEY" ]; then
-            echo "has_creds=true" >> "$GITHUB_OUTPUT"
+            has_creds=true
           else
-            echo "has_creds=false" >> "$GITHUB_OUTPUT"
             echo "::notice title=Hardware tests skipped::TESTFLINGER_CLIENT_ID/TESTFLINGER_SECRET_KEY are not configured; ask the Testflinger admin for a machine client and add them as repository secrets (see docs/CI.md)."
           fi
+          echo "has_creds=$has_creds" >> "$GITHUB_OUTPUT"
+
+          # Hardware jobs run on push to main/develop or any *testflinger*
+          # branch (never on PRs); keep this in sync with docs/CI.md.
+          systems='[]'
+          if [ "$has_creds" = true ] && [ "$EVENT_NAME" = push ]; then
+            case "$BRANCH" in
+              main|develop|*testflinger*)
+                # system: an entry in spread.yaml (testflinger backend). The
+                # RPi5 entries run both snap bases; the MediaTek Genio boards
+                # (Ubuntu 24.04 only) run the core24 snap.
+                systems='[{"base":"core24","system":"rpi5-core24"},{"base":"core26","system":"rpi5-core26"},{"base":"core24","system":"genio-1200"},{"base":"core24","system":"genio-700"},{"base":"core24","system":"genio-720"}]'
+                ;;
+            esac
+          fi
+          # The step-output file is line-oriented: keep JSON on one line.
+          echo "systems=$systems" >> "$GITHUB_OUTPUT"
 
   spread:
     name: Test ${{ matrix.system }} (spread)
     needs: [build, creds-check]
-    # Only run on push to specific branches, not on PRs, and only when
-    # Testflinger credentials are available.
-    if: >-
-      needs.creds-check.outputs.has_creds == 'true' &&
-      github.event_name == 'push' &&
-      (github.ref_name == 'main' || github.ref_name == 'develop' || contains(github.ref_name, 'testflinger'))
+    # No job-level `if`: the matrix itself is empty (zero jobs) whenever the
+    # hardware tests should not run. A job-level `if` would leave a skipped
+    # placeholder whose name shows the raw "${{ matrix.system }}" template.
     runs-on: ubuntu-24.04
     # Genio jobs flash an eMMC before running the suite, so allow more time.
     timeout-minutes: 300
@@ -99,23 +121,7 @@ jobs:
       actions: read
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          # system: an entry in spread.yaml (testflinger backend). The RPi5 and
-          # Genio entries below run the matching snap base on the target queue.
-          - base: core24
-            system: rpi5-core24
-          - base: core26
-            system: rpi5-core26
-          # MediaTek Genio boards (Ubuntu 24.04 only -> core24). Each queue is
-          # flashed through the zapper_iot connector; queue names and image
-          # URLs live in spread.yaml.
-          - base: core24
-            system: genio-1200
-          - base: core24
-            system: genio-700
-          - base: core24
-            system: genio-720
+      matrix: ${{ fromJSON(needs.creds-check.outputs.systems) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
