@@ -74,17 +74,16 @@ backends:
       # (shared by all Genio EVKs) plus the per-board boot assets published at
       # https://ubuntu.com/download/mediatek-genio.
       #
-      # TODO(owner): confirm the `queue` names below against the actual
-      # Testflinger agent list (they are auth-gated; check with the
-      # Testflinger admin or the web UI). Contact the Testflinger admin if
-      # the queues are restricted (they then also need their own client
-      # credentials).
+      # Queue names verified against the live Testflinger agent list
+      # (`testflinger-cli list-agents`); none of them are restricted, so a
+      # regular client is enough to submit jobs. If a queue stops responding,
+      # re-check the agent list for its current name.
       #
       # Only Ubuntu 24.04 (core24) images are published for Genio today, so
       # these run the core24 snap exclusively.
       # ------------------------------------------------------------------
       - genio-1200:
-          queue: genio-1200
+          queue: mediatek-g1200-evk
           provision-data:
             urls:
               # "Baoshan Classic" Ubuntu 24.04 Server eMMC image (shared by
@@ -100,7 +99,7 @@ backends:
             GPU_INTERFACE: gpu-2404
             GPU_PROVIDER: mesa-2404
       - genio-700:
-          queue: genio-700
+          queue: mediatek-g700-evk
           provision-data:
             urls:
               - https://people.canonical.com/~platform/images/mediatek/ubuntu-server-24.04/genio-classic-server-noble-emmc-20260506-42.tar.xz
@@ -114,7 +113,7 @@ backends:
             GPU_INTERFACE: gpu-2404
             GPU_PROVIDER: mesa-2404
       - genio-720:
-          queue: genio-720
+          queue: mediatek-g720-evk
           provision-data:
             urls:
               - https://people.canonical.com/~platform/images/mediatek/ubuntu-server-24.04/genio-classic-server-noble-emmc-20260506-42.tar.xz
