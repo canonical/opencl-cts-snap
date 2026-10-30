@@ -45,11 +45,11 @@ systems use the free-form `provision-data` map instead of the `image:` shorthand
 
 ```yaml
 - genio-1200:
-    queue: <genio-1200-queue>
+    queue: genio-1200
     provision-data:
       urls:
-        - <ubuntu-disk-image-url>
-        - <boot-firmware-url>
+        - https://people.canonical.com/~platform/images/mediatek/ubuntu-server-24.04/genio-classic-server-noble-emmc-20260506-42.tar.xz
+        - https://people.canonical.com/~platform/images/mediatek/ubuntu-server-24.04/genio-g1200-evk-boot-assets-20260506-50.tar.xz
     username: ubuntu
     reserve-key: gh:replace-with-your-github-user
     ssh-rsa-key: '$(HOST: echo "$SPREAD_SSH_KEY")'
@@ -60,12 +60,16 @@ systems use the free-form `provision-data` map instead of the `image:` shorthand
 supplied. The provisioning method itself is selected by the queue/agent, not by
 spread, so make sure the Genio queue is backed by a `zapper_iot` agent.
 
-Only Ubuntu 24.04 images are published for Genio today, hence the `core24` snap.
+The URLs point to the "Baoshan Classic" Ubuntu 24.04 Server eMMC image (shared
+by all Genio EVKs) plus the per-board boot firmware, both published at
+<https://ubuntu.com/download/mediatek-genio>. Only Ubuntu 24.04 images are
+published for Genio today, hence the `core24` snap.
 
-> **Before enabling the Genio jobs** fill in the real queue names and image URLs
-> in `spread.yaml` (currently `REPLACE_ME-*` placeholders). CI fails fast with a
-> clear message while placeholders remain. If the queues are *restricted* they
-> may also need their own Testflinger client credentials.
+> **Before enabling the Genio jobs** confirm the queue names in `spread.yaml`
+> against the actual Testflinger agent list (the queue list API is
+> auth-gated; check with the Testflinger admin or the web UI). If the queues
+> are *restricted* they may also need their own Testflinger client
+> credentials.
 
 ### Browsing and running the matrix
 
@@ -109,7 +113,7 @@ The spread entry for each system in `spread.yaml` looks like:
 ```yaml
 - rpi5-core24:
     queue: rpi5b
-    image: https://cdimage.ubuntu.com/.../ubuntu-24.04.4-preinstalled-server-arm64+raspi.img.xz
+    image: https://cdimage.ubuntu.com/.../ubuntu-24.04.5-preinstalled-server-arm64+raspi.img.xz
     username: ubuntu
     reserve-key: gh:replace-with-your-github-user
     ssh-rsa-key: '$(HOST: echo "$SPREAD_SSH_KEY")'
