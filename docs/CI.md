@@ -164,9 +164,11 @@ gh variable set SPREAD_RESERVE_KEY --body "gh:your-github-username"
   branch whose name contains `testflinger`, for both snap bases on the Pi
   (`core24`, `core26`) and for the core24 snap on each Genio board.
   A `creds-check` job detects whether the Testflinger credentials are
-  configured; if they are missing, the hardware jobs are **skipped with a
-  notice** instead of failing (they start automatically once
-  `TESTFLINGER_CLIENT_ID`/`TESTFLINGER_SECRET_KEY` are added, no rerun needed).
+  configured and emits the hardware job matrix accordingly: no credentials or
+  a non-triggering branch means an **empty matrix (zero hardware jobs)** with
+  a notice instead of a failure; once `TESTFLINGER_CLIENT_ID`/
+  `TESTFLINGER_SECRET_KEY` are added, the hardware jobs appear automatically
+  on the next run, no rerun needed.
 - **Locally:** install spread-plus, export the credentials above (no store
   publish needed), place an `opencl-cts.snap` at the repo root, and run:
 
