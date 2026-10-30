@@ -45,7 +45,7 @@ systems use the free-form `provision-data` map instead of the `image:` shorthand
 
 ```yaml
 - genio-1200:
-    queue: genio-1200
+    queue: mediatek-g1200-evk
     provision-data:
       urls:
         - https://people.canonical.com/~platform/images/mediatek/ubuntu-server-24.04/genio-classic-server-noble-emmc-20260506-42.tar.xz
@@ -65,11 +65,9 @@ by all Genio EVKs) plus the per-board boot firmware, both published at
 <https://ubuntu.com/download/mediatek-genio>. Only Ubuntu 24.04 images are
 published for Genio today, hence the `core24` snap.
 
-> **Before enabling the Genio jobs** confirm the queue names in `spread.yaml`
-> against the actual Testflinger agent list (the queue list API is
-> auth-gated; check with the Testflinger admin or the web UI). If the queues
-> are *restricted* they may also need their own Testflinger client
-> credentials.
+> Queue names were verified against the live Testflinger agent list
+> (`testflinger-cli list-agents`) and are not restricted; each Genio queue is
+> served by several `control_host_iot` agents (e.g. `mediatek-g700-evk-*`).
 
 ### Browsing and running the matrix
 

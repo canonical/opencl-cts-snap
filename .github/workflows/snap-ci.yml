@@ -82,8 +82,8 @@ jobs:
           - base: core26
             system: rpi5-core26
           # MediaTek Genio boards (Ubuntu 24.04 only -> core24). Each queue is
-          # flashed through the control_host_iot connector; fill in the queue names
-          # and image URLs in spread.yaml before enabling these.
+          # flashed through the control_host_iot connector; queue names and image
+          # URLs live in spread.yaml.
           - base: core24
             system: genio-1200
           - base: core24
@@ -132,13 +132,6 @@ jobs:
           : "${TESTFLINGER_SECRET_KEY:?TESTFLINGER_SECRET_KEY secret is required}"
           : "${SPREAD_RESERVE_KEY:?SPREAD_RESERVE_KEY variable is required (gh:<github-user>)}"
           : "${SPREAD_SSH_KEY:?SPREAD_SSH_KEY secret is required}"
-          # Fail fast (before consuming a device) while the Genio queue names
-          # and image URLs are still placeholders.
-          if [[ "${{ matrix.system }}" == genio-* ]] && grep -q 'REPLACE_ME' spread.yaml; then
-            echo "::error::spread.yaml still contains REPLACE_ME placeholders; fill in the Genio queue names and image URLs first."
-            grep -n 'REPLACE_ME' spread.yaml
-            exit 1
-          fi
           # spread-plus does not expand `$(HOST: ...)` in the `reserve-key`
           # field, so inject the imported-keys account from the variable.
           sed -i "s|^\( *reserve-key: \).*|\1${SPREAD_RESERVE_KEY}|" spread.yaml
