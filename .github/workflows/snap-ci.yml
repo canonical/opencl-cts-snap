@@ -60,11 +60,37 @@ jobs:
           snap: ${{ steps.build.outputs.snap }}
           release: ${{ matrix.release }}
 
+  # Hardware jobs need Testflinger machine credentials, which are issued by
+  # the Testflinger admin (see docs/CI.md). They may not be configured yet
+  # (e.g. on forks or while credentials are pending), so detect that up front
+  # and skip the hardware jobs with a notice instead of failing the run.
+  creds-check:
+    name: Check Testflinger credentials
+    runs-on: ubuntu-24.04
+    outputs:
+      has_creds: ${{ steps.check.outputs.has_creds }}
+    steps:
+      - id: check
+        env:
+          TF_CLIENT_ID: ${{ secrets.TESTFLINGER_CLIENT_ID }}
+          TF_SECRET_KEY: ${{ secrets.TESTFLINGER_SECRET_KEY }}
+        run: |
+          if [ -n "$TF_CLIENT_ID" ] && [ -n "$TF_SECRET_KEY" ]; then
+            echo "has_creds=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_creds=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Hardware tests skipped::TESTFLINGER_CLIENT_ID/TESTFLINGER_SECRET_KEY are not configured; ask the Testflinger admin for a machine client and add them as repository secrets (see docs/CI.md)."
+          fi
+
   spread:
     name: Test ${{ matrix.system }} (spread)
-    needs: build
-    # Only run on push to specific branches, not on PRs
-    if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'develop' || contains(github.ref_name, 'testflinger'))
+    needs: [build, creds-check]
+    # Only run on push to specific branches, not on PRs, and only when
+    # Testflinger credentials are available.
+    if: >-
+      needs.creds-check.outputs.has_creds == 'true' &&
+      github.event_name == 'push' &&
+      (github.ref_name == 'main' || github.ref_name == 'develop' || contains(github.ref_name, 'testflinger'))
     runs-on: ubuntu-24.04
     # Genio jobs flash an eMMC before running the suite, so allow more time.
     timeout-minutes: 300
