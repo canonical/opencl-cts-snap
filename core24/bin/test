@@ -3,8 +3,9 @@
 NO_CONFINEMENT=false
 REMAINING_ARGS=()
 # When invoked directly (bypassing the snap launcher), SNAP is not set.
-# Derive it from this script's own location: bin/test lives at $SNAP/bin/test.
-SNAP="${SNAP:-$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")}"
+# Derive it from this script's own location: bin/test lives at $SNAP/bin/test,
+# so the snap root is the parent of the resolved script's directory.
+SNAP="${SNAP:-$(dirname "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")")}"
 
 for arg in "$@"; do
     case "$arg" in
@@ -72,5 +73,5 @@ TEST_BIN="${SNAP}/usr/bin/test_conformance/${REMAINING_ARGS[0]}"
 TEST_DIR="$(dirname "$TEST_BIN")"
 TEST_NAME="$(basename "$TEST_BIN")"
 
-cd "$TEST_DIR"
+cd "$TEST_DIR" || exit 1
 exec "./$TEST_NAME" "${REMAINING_ARGS[@]:1}"

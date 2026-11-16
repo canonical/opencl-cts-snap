@@ -1,0 +1,103 @@
+# Runs the OpenCL CTS smoke tests on a freshly provisioned ARM board
+# (Raspberry Pi 5 or a MediaTek Genio EVK).
+#
+# The snap under test is shipped to the device by spread as part of the
+# project files (see the `opencl-cts.snap` rename step in snap-ci.yml) and
+# installed sideloaded with `snap install --dangerous`.
+summary: Run OpenCL CTS smoke tests on an ARM board (Raspberry Pi 5, MediaTek Genio)
+
+prepare: |
+    set -eu
+
+    : "${SNAP_BASE:?SNAP_BASE must be set by spread.yaml}"
+    : "${GPU_INTERFACE:?GPU_INTERFACE must be set by spread.yaml}"
+    : "${GPU_PROVIDER:?GPU_PROVIDER must be set by spread.yaml}"
+
+    echo "=== Installing host OpenCL driver (Mesa Rusticl) ==="
+    # These boards expose their GPU through Mesa Rusticl instead of a vendor
+    # OpenCL driver. The snap cannot reach the host ICD while confined (no ICD
+    # is staged inside the arm64 snap), so Mesa is installed on the host and
+    # tests run unsandboxed via the test wrapper's --no-confinement.
+    # HOST_OCL_PACKAGES lets each board pick its driver stack (Panthor on
+    # MediaTek, V3D on the Raspberry Pi, ...).
+    HOST_OCL_PACKAGES="${HOST_OCL_PACKAGES:-ocl-icd-libopencl1 mesa-opencl-icd}"
+    apt-get update -qq
+    # shellcheck disable=SC2086
+    apt-get install -y -qq $HOST_OCL_PACKAGES
+    test -f /usr/lib/aarch64-linux-gnu/libOpenCL.so.1
+
+    echo "=== Installing the OpenCL CTS snap (sideloaded) ==="
+    snap install --dangerous "$SPREAD_PATH/opencl-cts.snap"
+    snap list opencl-cts
+
+    echo "=== Connecting GPU content interface ($GPU_INTERFACE/$GPU_PROVIDER) ==="
+    snap connect "opencl-cts:$GPU_INTERFACE" "$GPU_PROVIDER:$GPU_INTERFACE" || true
+
+execute: |
+    set -eu
+
+    echo "=== Listing available tests ==="
+    opencl-cts.list-tests
+
+    TESTS=$(opencl-cts.list-tests)
+
+    echo ""
+    echo "=== Building smoke test subset ==="
+    # Rusticl is not officially CTS-conformant and some tests can hang, so run
+    # a representative smoke subset instead of the whole suite.
+    SMOKE_PREFIXES="${SMOKE_PREFIXES:-api basic buffer bufimage vector}"
+    SUBSET=""
+    for prefix in $SMOKE_PREFIXES; do
+        for test in $TESTS; do
+            case "$test" in
+                "$prefix/"*) SUBSET="$SUBSET $test" ;;
+            esac
+        done
+    done
+    if [ -z "$SUBSET" ]; then
+        echo "No tests matched smoke prefixes, falling back to first 5 tests"
+        SUBSET=$(echo "$TESTS" | head -n 5)
+    fi
+    TESTS=$SUBSET
+    echo "$TESTS"
+
+    # Execute the snap's test wrapper directly (bypassing snapd confinement) so
+    # it can LD_PRELOAD the host OpenCL ICD loader. A timeout guards against
+    # tests that hang on Mesa Rusticl.
+    wrapper=$(find /snap/opencl-cts/current -maxdepth 2 -type f -name test | head -n 1)
+
+    echo ""
+    echo "=== Running smoke subset on ${SPREAD_SYSTEM:-board} ($SNAP_BASE) ==="
+    FAILED_TESTS=""
+    TOTAL=0
+    FAILED=0
+    for test in $TESTS; do
+        TOTAL=$((TOTAL + 1))
+        echo ""
+        echo "--- Running test: $test ---"
+        if SNAP=/snap/opencl-cts/current timeout 300 "$wrapper" --no-confinement "$test"; then
+            echo "PASSED: $test"
+        else
+            FAILED_TESTS="$FAILED_TESTS $test"
+            FAILED=$((FAILED + 1))
+            echo "FAILED: $test"
+        fi
+    done
+
+    echo ""
+    echo "=== Test Summary ==="
+    echo "Total tests: $TOTAL"
+    echo "Passed: $((TOTAL - FAILED))"
+    echo "Failed: $FAILED"
+
+    if [ "$FAILED" -gt 0 ]; then
+        echo ""
+        echo "Failed tests:"
+        for test in $FAILED_TESTS; do
+            echo "  - $test"
+        done
+        exit 1
+    fi
+
+    echo ""
+    echo "All tests passed!"
