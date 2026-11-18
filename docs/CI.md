@@ -102,10 +102,14 @@ Upstream `spread` has no Testflinger backend. Use
 [spread-plus](https://github.com/canonical/spread-plus), which is fully
 compatible with the `spread.yaml` format and adds the `testflinger` backend.
 The workflow installs a **pinned release** (currently `2026.09.22`) so CI is
-reproducible. You can also install it locally:
+reproducible. Install the same release locally (the Go module builds a binary
+named `spread`, but the commands in this document use `spread-plus`, so prefer
+the tarball which ships it under that name):
 
 ```
-go install github.com/canonical/spread-plus/cmd/spread@latest
+curl -fsSL -o /tmp/spread-plus.tar.gz \
+  https://github.com/canonical/spread-plus/releases/download/2026.09.22/spread-plus-amd64.tar.gz
+tar -xzf /tmp/spread-plus.tar.gz -C /usr/local/bin spread-plus
 ```
 
 ### SSH authentication (reserve-key)
@@ -164,13 +168,17 @@ gh variable set SPREAD_RESERVE_KEY --body "gh:your-github-username"
 
 ## Running the tests
 
-- **In CI:** the `spread` job runs on every push to `main`, `develop`, and any
-  branch whose name ends in or contains `testflinger`, for both snap bases on
-  the Pi (`core24`, `core26`) and for the core24 snap on each Genio board.
+- **In CI:** the `spread` job runs for both snap bases on the Pi (`core24`,
+  `core26`) and for the core24 snap on each Genio board on:
+  - every push to `main`, `develop`, and any branch whose name ends in or
+    contains `testflinger`, and
+  - every pull request opened from the same repository (fork PRs cannot read
+    repository secrets, so their hardware jobs are skipped with a notice).
+
   A `creds-check` job detects whether the Testflinger credentials are
-  configured and emits the hardware job matrix accordingly: no credentials or
-  a non-triggering branch means an **empty matrix (no hardware jobs, only a
-  skipped placeholder)** with a notice instead of a failure; once
+  configured and emits the hardware job matrix accordingly: no credentials
+  means an **empty matrix (no hardware jobs, only a skipped placeholder)** with
+  a notice instead of a failure; once
   `TESTFLINGER_CLIENT_ID`/`TESTFLINGER_SECRET_KEY` are added, the hardware
   jobs appear automatically on the next run, no rerun needed.
 - **Locally:** install spread-plus, export the credentials above (no store

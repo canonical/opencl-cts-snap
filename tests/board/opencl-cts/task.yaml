@@ -40,6 +40,11 @@ execute: |
     opencl-cts.list-tests
 
     TESTS=$(opencl-cts.list-tests)
+    if [ -z "$TESTS" ]; then
+        echo "ERROR: opencl-cts.list-tests returned no tests" >&2
+        echo "The snap artifact is broken or empty; refusing to pass vacuously." >&2
+        exit 1
+    fi
 
     echo ""
     echo "=== Building smoke test subset ==="

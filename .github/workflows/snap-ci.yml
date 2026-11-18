@@ -127,7 +127,10 @@ jobs:
           echo "has_creds=$has_creds" >> "$GITHUB_OUTPUT"
 
           # Hardware jobs run on push to main/develop or any *testflinger*
-          # branch (never on PRs); keep this in sync with docs/CI.md.
+          # branch, and on pull requests from the same repository (fork PRs
+          # cannot read repository secrets, so the has_creds check above skips
+          # them automatically with the notice). Keep this in sync with
+          # docs/CI.md.
           #
           # The matrix must never be empty: GitHub neither creates a skipped
           # placeholder job for an empty fromJSON() matrix nor marks the run
@@ -135,16 +138,27 @@ jobs:
           # job skips itself on it.
           systems='[{"base":"none","system":"none"}]'
           run_hardware=false
-          if [ "$has_creds" = true ] && [ "$EVENT_NAME" = push ]; then
-            case "$BRANCH" in
-              main|develop|*testflinger*)
+          if [ "$has_creds" = true ]; then
+            case "$EVENT_NAME" in
+              push)
+                case "$BRANCH" in
+                  main|develop|*testflinger*)
+                    run_hardware=true
+                    ;;
+                esac
+                ;;
+              pull_request)
+                # Same-repo PRs: run the full matrix. Fork PRs never reach
+                # this branch of the check because they have no secrets.
                 run_hardware=true
-                # system: an entry in spread.yaml (testflinger backend). The
-                # RPi5 entries run both snap bases; the MediaTek Genio boards
-                # (Ubuntu 24.04 only) run the core24 snap.
-                systems='[{"base":"core24","system":"rpi5-core24"},{"base":"core26","system":"rpi5-core26"},{"base":"core24","system":"genio-1200"},{"base":"core24","system":"genio-700"},{"base":"core24","system":"genio-720"}]'
                 ;;
             esac
+          fi
+          if [ "$run_hardware" = true ]; then
+            # system: an entry in spread.yaml (testflinger backend). The
+            # RPi5 entries run both snap bases; the MediaTek Genio boards
+            # (Ubuntu 24.04 only) run the core24 snap.
+            systems='[{"base":"core24","system":"rpi5-core24"},{"base":"core26","system":"rpi5-core26"},{"base":"core24","system":"genio-1200"},{"base":"core24","system":"genio-700"},{"base":"core24","system":"genio-720"}]'
           fi
           echo "run_hardware=$run_hardware" >> "$GITHUB_OUTPUT"
           # The step-output file is line-oriented: keep JSON on one line.
@@ -155,7 +169,8 @@ jobs:
     # un-expanded in the checks list for the skipped placeholder entry.
     name: Test hardware (spread)
     # Skip everything (including the "none" placeholder matrix entry) when
-    # there is nothing to run: no credentials or a non-triggering event.
+    # there is nothing to run: no credentials, a non-triggering event, or a
+    # push to a non-hardware branch.
     # The matrix context is not available in job-level conditions, hence the
     # run_hardware output.
     if: needs.creds-check.outputs.run_hardware == 'true'

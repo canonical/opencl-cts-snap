@@ -100,13 +100,19 @@ parts:
         (cd "$(dirname "$zip")" && unzip -q -o "$zip")
       done
 
-      # Install Intel OpenCL packages on amd64 only
+      # Install Intel OpenCL packages on amd64 only. dpkg -x does not resolve
+      # dependencies the way stage-packages does, so resolve the full runtime
+      # dependency closure with apt-cache and extract every .deb.
       if [ "$(dpkg --print-architecture)" = "amd64" ]; then
-        apt-get download intel-opencl-icd intel-ocloc
-        for deb in intel-*.deb; do
+        pkgs=$(apt-cache depends --recurse --no-recommends --no-suggests \
+            --no-conflicts --no-breaks --no-replaces --no-enhances \
+            intel-opencl-icd intel-ocloc |
+          awk '{print $1}' | grep -E '^[a-z0-9]' | sort -u)
+        apt-get download $pkgs
+        for deb in ./*.deb; do
           dpkg -x "$deb" "${CRAFT_PART_INSTALL}/"
         done
-        rm -f intel-*.deb
+        rm -f ./*.deb
       fi
 
       # snapd validates layout bind targets at install time; the Intel debs
